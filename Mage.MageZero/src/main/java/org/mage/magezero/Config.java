@@ -3,7 +3,6 @@ package org.mage.magezero;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -53,7 +52,7 @@ public class Config {
     public static class PlayerConfig {
         public String deckPath;
         public String type;
-        public String outputDir;
+        public String outputFile;
         public final PriorsConfig priors;
         public final NoiseConfig noise;
         public final MctsConfig mcts;
@@ -64,7 +63,7 @@ public class Config {
         public PlayerConfig(Map<String, Object> raw) {
             this.deckPath = (String) raw.get("deckPath");
             this.type = (String) raw.getOrDefault("type", "mcts");
-            this.outputDir = (String) raw.getOrDefault("output_dir", "data/");
+            this.outputFile = (String) raw.getOrDefault("output_file", "");
             this.priors = new PriorsConfig((Map<String, Object>) raw.getOrDefault("priors", Collections.emptyMap()));
             this.noise = new NoiseConfig((Map<String, Object>) raw.getOrDefault("noise", Collections.emptyMap()));
             this.mcts = new MctsConfig((Map<String, Object>) raw.getOrDefault("mcts", Collections.emptyMap()));

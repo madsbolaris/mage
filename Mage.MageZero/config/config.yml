@@ -5,7 +5,7 @@ goes_first: random  # player_a, player_b, random
 player_a:
   deckPath: decks/UWTempo.dck
   type: mcts
-  output_dir: data/playerA
+  #output_file: data/playerA/AvsB.hdf5
 
   priors:
     priority: false
@@ -36,7 +36,7 @@ player_a:
 player_b:
   deckPath: decks/UWTempo.dck
   type: mcts
-  output_dir: data/playerB
+  #utput_file: data/playerB/BvsA.hdf5
 
   priors:
     priority: false

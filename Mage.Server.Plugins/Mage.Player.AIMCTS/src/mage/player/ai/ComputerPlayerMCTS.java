@@ -9,6 +9,7 @@ import mage.cards.Cards;
 import mage.choices.Choice;
 import mage.constants.*;
 import mage.game.Game;
+import mage.player.ai.config.MCTSDefaults;
 import mage.player.ai.encoder.ActionEncoder;
 import mage.player.ai.encoder.StateEncoder;
 import mage.players.Player;
@@ -28,19 +29,19 @@ import static mage.target.TargetImpl.STOP_CHOOSING;
  */
 public class ComputerPlayerMCTS extends ComputerPlayer {
 
-    public double searchTimeout = 4;//seconds
-    public int searchBudget = 1000;//per thread
+    public double searchTimeout = MCTSDefaults.CURRENT.searchTimeout;//seconds
+    public int searchBudget = MCTSDefaults.CURRENT.searchBudget;//per thread
 
 
     public transient ActionEncoder actionEncoder = null;
     public transient StateEncoder stateEncoder = null;
 
     //these flags should be set through fields in ParallelDataGenerator.java
-    public boolean noNoise = true;
-    public boolean noPolicyPriority = true;
-    public boolean noPolicyTarget = true;
-    public boolean noPolicyUse = true;
-    public boolean noPolicyOpponent = true;
+    public boolean noNoise = MCTSDefaults.CURRENT.noNoise;
+    public boolean noPolicyPriority = MCTSDefaults.CURRENT.noPolicyPriority;
+    public boolean noPolicyTarget = MCTSDefaults.CURRENT.noPolicyTarget;
+    public boolean noPolicyUse = MCTSDefaults.CURRENT.noPolicyUse;
+    public boolean noPolicyOpponent = MCTSDefaults.CURRENT.noPolicyOpponent;
 
     //dirichlet noise is applied once to the priors of the root node; this represents how much of those priors should be noise
     public static double DIRICHLET_NOISE_EPS = 0;

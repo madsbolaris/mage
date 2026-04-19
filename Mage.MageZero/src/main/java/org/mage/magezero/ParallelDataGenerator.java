@@ -153,12 +153,18 @@ public class ParallelDataGenerator {
         deckNameA = extractDeckName(Config.INSTANCE.playerA.deckPath);
         deckNameB = extractDeckName(Config.INSTANCE.playerB.deckPath);
 
-        String fileA = deckNameA + "_vs_" + deckNameB + ".hdf5";
-        String fileB = deckNameB + "_vs_" + deckNameA + ".hdf5";
+        String fileA = "data/playerA/" + deckNameA + "_vs_" + deckNameB + ".hdf5";
+        String fileB = "data/playerB/" + deckNameB + "_vs_" + deckNameA + ".hdf5";
+        if(!Config.INSTANCE.playerA.outputFile.isEmpty()) {
+            fileA = Config.INSTANCE.playerA.outputFile;
+        }
+        if(!Config.INSTANCE.playerB.outputFile.isEmpty()) {
+            fileB = Config.INSTANCE.playerB.outputFile;
+        }
 
         try {
-            fwA = new LabeledStateWriter(Config.INSTANCE.playerA.outputDir + "/" + fileA);
-            fwB = new LabeledStateWriter(Config.INSTANCE.playerB.outputDir + "/" + fileB);
+            fwA = new LabeledStateWriter(fileA);
+            fwB = new LabeledStateWriter(fileB);
             writer = getThread(fwA, fwB);
         } catch (IOException e) {
             throw new RuntimeException(e);

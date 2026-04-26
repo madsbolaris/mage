@@ -46,8 +46,12 @@ public class RemoteModelEvaluator implements AutoCloseable {
 
 
     // ---------- batching controls ----------
-    public static final int batchInterval = 2500;//micro seconds
-    public static final int maxBatchSize = 4;
+    // Tightened cadence and raised batch ceiling to match MAX_PENDING=16 in
+    // ComputerPlayerMCTS2. Previously the client capped at 4, splitting a 16-pending
+    // burst into four sequential HTTP round-trips. Pairs with the server-side
+    // MAX_WAIT_MS in MageZero/server.py. See madsbolaris/mage#1 (J1).
+    public static final int batchInterval = 1000;//micro seconds
+    public static final int maxBatchSize = 16;
 
     private final OkHttpClient http;
     private final HttpUrl evalUrl;

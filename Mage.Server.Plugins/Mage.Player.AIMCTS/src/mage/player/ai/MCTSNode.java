@@ -44,6 +44,12 @@ public class MCTSNode {
 
     //node statistics
     private int visits = 0;
+    /**
+     * sqrt(visits) cached for the PUCT exploration term in {@link #select}. Recomputed inside
+     * {@link #backpropagate} (the only path that mutates {@code visits}). Saves a hot-path
+     * Math.sqrt() call per child per selection. See madsbolaris/mage#3 (J3).
+     */
+    private double cachedSqrtVisits = 0.0;
     private int depth = 1;
     private long dirichletSeed = 0;
     private double prior = 1;
@@ -444,7 +450,7 @@ public class MCTSNode {
         MCTSNode best    = null;
         double bestVal = Double.NEGATIVE_INFINITY;
 
-        double sqrtN = Math.sqrt(getVisits());
+        double sqrtN = cachedSqrtVisits;
 
         for (MCTSNode child : children) {
             // value term: 0 if unvisited, else average reward
@@ -597,6 +603,9 @@ public class MCTSNode {
 
         visits+=n;
         score += result;
+        // Refresh PUCT exploration cache; visits only mutates here so this is the
+        // sole write site. See madsbolaris/mage#3 (J3).
+        cachedSqrtVisits = Math.sqrt(visits);
 
         if (parent != null) {
             parent.backpropagate(result * ComputerPlayerMCTS.BACKPROP_DISCOUNT, n);

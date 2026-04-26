@@ -13,7 +13,7 @@ import mage.players.Player;
 import mage.players.PlayerScript;
 import mage.util.RandomUtil;
 import org.apache.log4j.Logger;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.commons.math3.distribution.GammaDistribution;
 import org.apache.commons.math3.random.JDKRandomGenerator;
@@ -51,6 +51,16 @@ public class MCTSNode {
      */
     private double cachedSqrtVisits = 0.0;
     private int depth = 1;
+    /**
+     * Incremental subtree size. Updated in {@link #expand}, {@link #prune}, and {@link #reset}.
+     * Replaces the recursive {@code size()} walk in the MCTS search loop. See madsbolaris/mage#12 (C24).
+     */
+    private int subtreeSize = 1;
+    /**
+     * Incremental max depth of this subtree. Updated in {@link #expand} and approximated after prune.
+     * Replaces the recursive {@code maxDepth()} walk. See madsbolaris/mage#13 (C25).
+     */
+    private int maxSubtreeDepth = 1;
     private long dirichletSeed = 0;
     private double prior = 1;
     private double score = 0;
@@ -422,14 +432,15 @@ public class MCTSNode {
      * @return
      */
     public boolean containsLegalNode() {
-        boolean found = false;
         for(MCTSNode child : children) {
             if(child.isLegalState()) {
                 return true;
             }
-            found |= child.containsLegalNode();
+            if(child.containsLegalNode()) {
+                return true;
+            }
         }
-        return found;
+        return false;
     }
     public void randomizeNoiseSeed() {
         dirichletSeed = RandomUtil.nextInt();
@@ -531,11 +542,26 @@ public class MCTSNode {
             logger.fatal("next action is null");
         }
         ActionEncoder.ActionType actionType = player.getNextAction();
-        children.addAll(createChildren(actionType, player, rootGame));
+        List<MCTSNode> newChildren = createChildren(actionType, player, rootGame);
+        children.addAll(newChildren);
         logger.debug(children.size() + " children expanded");
+        int childDepth = depth + 1;
+        double uniformPrior = 1.0 / children.size();
         for (MCTSNode node : children) {
-            node.depth = depth + 1;
-            node.prior = 1.0/children.size();
+            node.depth = childDepth;
+            node.prior = uniformPrior;
+        }
+        // Update incremental subtree counters up to root
+        int added = newChildren.size();
+        if (added > 0) {
+            int newMaxDepth = childDepth;
+            for (MCTSNode n = this; n != null; n = n.parent) {
+                n.subtreeSize += added;
+                if (newMaxDepth > n.maxSubtreeDepth) {
+                    n.maxSubtreeDepth = newMaxDepth;
+                }
+                newMaxDepth++;
+            }
         }
     }
     public synchronized void setPriors() {
@@ -599,18 +625,21 @@ public class MCTSNode {
     public void backpropagate(double result) {
         backpropagate(result, 1);
     }
-    public synchronized void backpropagate(double result, int n) {
-
-        visits+=n;
-        score += result;
-        // Refresh PUCT exploration cache; visits only mutates here so this is the
-        // sole write site. See madsbolaris/mage#3 (J3).
-        cachedSqrtVisits = Math.sqrt(visits);
-
-        if (parent != null) {
-            parent.backpropagate(result * ComputerPlayerMCTS.BACKPROP_DISCOUNT, n);
+    /**
+     * Iterative backpropagation — walks up to root via parent pointers instead of
+     * recursing. Eliminates stack depth proportional to tree depth and avoids nested
+     * synchronized locks. See madsbolaris/mage#16 (C34).
+     */
+    public void backpropagate(double result, int n) {
+        double r = result;
+        for (MCTSNode node = this; node != null; node = node.parent) {
+            synchronized (node) {
+                node.visits += n;
+                node.score += r;
+                node.cachedSqrtVisits = Math.sqrt(node.visits);
+            }
+            r *= ComputerPlayerMCTS.BACKPROP_DISCOUNT;
         }
-
     }
     public MCTSNode bestChild(Game baseGame) {
         ComputerPlayerMCTS myPlayer = basePlayer;
@@ -709,7 +738,7 @@ public class MCTSNode {
             probabilities.set(i, probabilities.get(i) / distributionSum);
         }
 
-        double randomValue = new Random().nextDouble();
+        double randomValue = ThreadLocalRandom.current().nextDouble();
         double cumulativeProbability = 0.0;
         for (int i = 0; i < children.size(); i++) {
             cumulativeProbability += probabilities.get(i);
@@ -733,12 +762,17 @@ public class MCTSNode {
             return;
         }
         children.remove(node);
+        int removedSize = node.subtreeSize;
         node.parent = null;
 
         if (!children.isEmpty() || parent == null) {
             //correct MCTS stats
             if (node.visits > 0) {
                 backpropagate(-node.score * ComputerPlayerMCTS.BACKPROP_DISCOUNT, -node.getVisits());
+            }
+            // Adjust incremental subtree size up to root
+            for (MCTSNode n = this; n != null; n = n.parent) {
+                n.subtreeSize -= removedSize;
             }
         } else {
             parent.prune(this);
@@ -803,6 +837,10 @@ public class MCTSNode {
         return winner;
     }
 
+    /**
+     * @deprecated Use {@link #getSubtreeSize()} for O(1) access.
+     */
+    @Deprecated
     public int size() {
         int num = 1;
         for (MCTSNode child : children) {
@@ -810,6 +848,16 @@ public class MCTSNode {
         }
         return num;
     }
+
+    /** O(1) incremental subtree size. See madsbolaris/mage#12 (C24). */
+    public int getSubtreeSize() {
+        return subtreeSize;
+    }
+
+    /**
+     * @deprecated Use {@link #getMaxSubtreeDepth()} for O(1) access.
+     */
+    @Deprecated
     public int maxDepth() {
         int max = 0;
         for (MCTSNode child : children) {
@@ -818,11 +866,18 @@ public class MCTSNode {
         return max+1;
     }
 
+    /** O(1) incremental max depth. See madsbolaris/mage#13 (C25). */
+    public int getMaxSubtreeDepth() {
+        return maxSubtreeDepth;
+    }
+
     public void reset() {
         children.clear();
         score = 0;
         visits = 0;
         depth = 1;
+        subtreeSize = 1;
+        maxSubtreeDepth = 1;
     }
     /**
      * Copies game and replaces all players in copy with simulated players

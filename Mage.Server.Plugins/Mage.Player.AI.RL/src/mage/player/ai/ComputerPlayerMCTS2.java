@@ -168,11 +168,11 @@ public class ComputerPlayerMCTS2 extends ComputerPlayerMCTS {
                 logger.warn("force time out after one minute - couldn't find legal move");
                 break;
             }
-            if(root.size() >= MAX_TREE_NODES) {
+            if(root.getSubtreeSize() >= MAX_TREE_NODES) {
                 logger.info("too many nodes in tree, ending search");
                 break;
             }
-            if(root.maxDepth() >= MAX_TREE_DEPTH) {
+            if(root.getMaxSubtreeDepth() >= MAX_TREE_DEPTH) {
                 logger.info("tree is too deep, ending search");
                 break;
             }
@@ -262,7 +262,7 @@ public class ComputerPlayerMCTS2 extends ComputerPlayerMCTS {
             logger.info(String.format("Ran %d simulations.", simCount));
             logger.info(String.format("COMPOSITE CHILDREN: %s", getChildVisitsFromRoot().toString()));
             logger.info("Player: " + name + " simulated " + simCount + " evaluations in " + totalThinkTimeThisMove
-                    + " seconds - nodes in tree: " + root.size());
+                    + " seconds - nodes in tree: " + root.getSubtreeSize());
             logger.info("Total: simulated " + totalSimulations + " evaluations in " + totalThinkTime
                     + " seconds - Average: " + (totalThinkTime > 0 ? totalSimulations / totalThinkTime : 0));
             logger.info(illegalPurged + " illegals purged, " + validDuplicatesPurged + " valid duplicates purged, " +  invalidDuplicatesPurged + " invalid duplicates purged.");

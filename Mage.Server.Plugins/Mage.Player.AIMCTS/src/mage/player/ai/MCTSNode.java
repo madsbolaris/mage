@@ -325,8 +325,17 @@ public class MCTSNode {
 
         this.terminal = rootGame.checkIfGameIsOver();
         this.winner = isWinner(rootGame, targetPlayer);
-        this.prefixScript = new PlayerScript(playerA.getPlayerHistory());
-        this.opponentPrefixScript = new PlayerScript(playerB.getPlayerHistory());
+
+        // Checkpoint: save rootGame state for ALL nodes (not just PRIORITY) and clear
+        // prefix scripts. Children will copy from this checkpoint and replay only their
+        // single action, reducing replay cost from O(chain_depth) to O(1) per node.
+        // The old code saved state only for PRIORITY nodes and kept the full replay
+        // history in prefixScript; micro-decision nodes reused the PRIORITY ancestor's
+        // state and replayed the entire chain on every validation.
+        // See madsbolaris/mage#27 (C49).
+        this.state = rootGame.getState();
+        this.prefixScript = new PlayerScript();
+        this.opponentPrefixScript = new PlayerScript();
 
         if(this.terminal) {
             return; //cant determine acting player after game has ended
@@ -339,13 +348,6 @@ public class MCTSNode {
         actionType = actingPlayer.getNextAction();
         stateVector = actingPlayer.getStateVector();
         stateString = rootGame.getState().getValue(rootGame, targetPlayer);
-        if(parent != null) {
-            if (actingPlayer.getNextAction() == ActionEncoder.ActionType.PRIORITY) {//priority point, use current state value
-                this.state = rootGame.getState();
-            } else {//micro point, use previous state value
-                this.state = parent.state;
-            }
-        }
     }
     private void setPlayer(Game game) {
         for (Player p : game.getPlayers().values()) {

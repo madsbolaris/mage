@@ -461,7 +461,10 @@ public class ParallelDataGenerator {
     }
     protected Player createLocalPlayer(Game game, String name, String deckPath, Match match) throws GameException {
         Player player = createPlayer(name, game.getRangeOfInfluence());
-        player.setTestMode(true);
+        // Do NOT set testMode — it causes XMage to throw IllegalStateException
+        // on any game error instead of rolling back and continuing. MageZero
+        // games should be resilient to rare rules-engine edge cases.
+        // player.setTestMode(true);
 
 
         logger.debug("Loading deck...");

@@ -601,7 +601,12 @@ public class StateEncoder {
      */
     public synchronized Set<Integer> processState(Game game, UUID decisionPlayerId, ActionEncoder.ActionType decisionType, String decisionsText) {
         features.stateRefresh();
-        featureVector.clear();
+        // Use a fresh set each call instead of copying from a reused field.
+        // The old pattern (clear + add + copy) created ~200 boxed Integers twice.
+        // Now we create them once, hand off ownership, and allocate a new set next call.
+        // See madsbolaris/mage#4 (J4).
+        Set<Integer> result = new HashSet<>();
+        featureVector = result;
 
         //globals
         if(game.getPhase() != null) {
@@ -633,7 +638,7 @@ public class StateEncoder {
         processPlayer(game, opponentId, decisionPlayerId, opponentFeatures);
 
 
-        return new HashSet<>(featureVector);
+        return result;
 
     }
 

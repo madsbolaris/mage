@@ -61,6 +61,11 @@ public class MCTSNode {
      * Replaces the recursive {@code maxDepth()} walk. See madsbolaris/mage#13 (C25).
      */
     private int maxSubtreeDepth = 1;
+    /**
+     * Cached action index for this node, computed once by {@link #getActionIndex}.
+     * -1 means not yet computed. See madsbolaris/mage#20 (C38).
+     */
+    private int cachedActionIndex = -1;
     private long dirichletSeed = 0;
     private double prior = 1;
     private double score = 0;
@@ -257,6 +262,7 @@ public class MCTSNode {
         return parent.getChildOfCommonAncestor(node);
     }
     public int getActionIndex(Game game) {
+        if (cachedActionIndex >= 0) return cachedActionIndex;
         ActionEncoder.ActionType actionType = parent.actionType;
         int idx;
         if(actionType == ActionEncoder.ActionType.PRIORITY) {
@@ -268,6 +274,7 @@ public class MCTSNode {
         } else {
             idx = -1;
         }
+        if (idx >= 0) cachedActionIndex = idx;
         return idx;
     }
     public String getOrderString(Game game) {
@@ -321,7 +328,9 @@ public class MCTSNode {
         this.prefixScript = new PlayerScript(playerA.getPlayerHistory());
         this.opponentPrefixScript = new PlayerScript(playerB.getPlayerHistory());
 
-        if(this.terminal) return; //cant determine acting player after game has ended
+        if(this.terminal) {
+            return; //cant determine acting player after game has ended
+        }
 
         MCTSPlayer actingPlayer = (MCTSPlayer) rootGame.getPlayer(playerId);
 
@@ -656,45 +665,48 @@ public class MCTSNode {
                 node.reset();
             }
         }
-        StringBuilder sb = new StringBuilder();
-        if(baseGame.getTurnStepType() == null) {
-            sb.append("pre-game");
-        } else {
-            sb.append(baseGame.getTurnStepType().toString());
-        }
-        HashMap<String, MCTSNode> actionNames = new HashMap<>();
-        sb.append(baseGame.getStack().toString());
-        sb.append("pool=").append(myPlayer.getManaPool().getMana());
-        sb.append(" actions: ");
-        for (MCTSNode node: children) {
-            if(node.targetAction != null) {
-                sb.append(String.format("[%s score: %.3f count: %d] ", baseGame.getEntityName(node.targetAction, targetPlayer), node.getMeanScore(), node.getVisits()));
-            } else if(node.choiceAction != null) {
-                sb.append(String.format("[%s score: %.3f count: %d] ", node.choiceAction, node.getMeanScore(), node.getVisits()));
-            } else if(node.useAction != null) {
-                sb.append(String.format("[%s score: %.3f count: %d] ", node.useAction, node.getMeanScore(), node.getVisits()));
-            } else if(node.amountAction != null) {
-                sb.append(String.format("[%s score: %.3f count: %d] ", node.amountAction, node.getMeanScore(), node.getVisits()));
-            } else if(node.priorityAction != null){
-                sb.append(String.format("[%s score: %.3f count: %d] ", node.priorityAction, node.getMeanScore(), node.getVisits()));
-                if(actionNames.containsKey(node.priorityAction.toString()) && actionNames.get(node.priorityAction.toString()) != null && actionNames.get(node.priorityAction.toString()).stateVector != null) {
-                    logger.warn("FOUND DUPLICATE ACTION " + node.priorityAction.toString());
-                    HashSet<Integer> intersection = new HashSet<>(actionNames.get(node.priorityAction.toString()).stateVector);
-                    intersection.retainAll(node.stateVector);
-                    HashSet<Integer> onlyA = new HashSet<>(actionNames.get(node.priorityAction.toString()).stateVector);
-                    onlyA.removeAll(intersection);
-                    HashSet<Integer> onlyB = new HashSet<>(node.stateVector);
-                    onlyB.removeAll(intersection);
-                    logger.warn("ONLY IN A: " + onlyA);
-                    logger.warn("ONLY IN B: " + onlyB);
-                } else {
-                    actionNames.put(node.priorityAction.toString(), node);
-                }
+        // Only build the expensive log string when it will actually be printed.
+        // The StringBuilder + String.format calls were running on every bestChild()
+        // call even when logging was suppressed. See madsbolaris/mage#8 (J8).
+        if(!children.isEmpty() && !myPlayer.allMana && logger.isInfoEnabled()) {
+            StringBuilder sb = new StringBuilder();
+            if(baseGame.getTurnStepType() == null) {
+                sb.append("pre-game");
             } else {
-                logger.error("no action in node");
+                sb.append(baseGame.getTurnStepType().toString());
             }
-        }
-        if(!children.isEmpty() && !myPlayer.allMana) {
+            HashMap<String, MCTSNode> actionNames = new HashMap<>();
+            sb.append(baseGame.getStack().toString());
+            sb.append("pool=").append(myPlayer.getManaPool().getMana());
+            sb.append(" actions: ");
+            for (MCTSNode node: children) {
+                if(node.targetAction != null) {
+                    sb.append(String.format("[%s score: %.3f count: %d] ", baseGame.getEntityName(node.targetAction, targetPlayer), node.getMeanScore(), node.getVisits()));
+                } else if(node.choiceAction != null) {
+                    sb.append(String.format("[%s score: %.3f count: %d] ", node.choiceAction, node.getMeanScore(), node.getVisits()));
+                } else if(node.useAction != null) {
+                    sb.append(String.format("[%s score: %.3f count: %d] ", node.useAction, node.getMeanScore(), node.getVisits()));
+                } else if(node.amountAction != null) {
+                    sb.append(String.format("[%s score: %.3f count: %d] ", node.amountAction, node.getMeanScore(), node.getVisits()));
+                } else if(node.priorityAction != null){
+                    sb.append(String.format("[%s score: %.3f count: %d] ", node.priorityAction, node.getMeanScore(), node.getVisits()));
+                    if(actionNames.containsKey(node.priorityAction.toString()) && actionNames.get(node.priorityAction.toString()) != null && actionNames.get(node.priorityAction.toString()).stateVector != null) {
+                        logger.warn("FOUND DUPLICATE ACTION " + node.priorityAction.toString());
+                        HashSet<Integer> intersection = new HashSet<>(actionNames.get(node.priorityAction.toString()).stateVector);
+                        intersection.retainAll(node.stateVector);
+                        HashSet<Integer> onlyA = new HashSet<>(actionNames.get(node.priorityAction.toString()).stateVector);
+                        onlyA.removeAll(intersection);
+                        HashSet<Integer> onlyB = new HashSet<>(node.stateVector);
+                        onlyB.removeAll(intersection);
+                        logger.warn("ONLY IN A: " + onlyA);
+                        logger.warn("ONLY IN B: " + onlyB);
+                    } else {
+                        actionNames.put(node.priorityAction.toString(), node);
+                    }
+                } else {
+                    logger.error("no action in node");
+                }
+            }
             logger.info(sb.toString());
         }
         //derive temp from value
@@ -878,6 +890,7 @@ public class MCTSNode {
         depth = 1;
         subtreeSize = 1;
         maxSubtreeDepth = 1;
+        cachedActionIndex = -1;
     }
     /**
      * Copies game and replaces all players in copy with simulated players

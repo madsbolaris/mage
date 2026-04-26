@@ -36,8 +36,11 @@ public class ComputerPlayerMCTS2 extends ComputerPlayerMCTS {
     private static final Logger logger = Logger.getLogger(ComputerPlayerMCTS2.class);
     public AtomicInteger pendingNodes =  new AtomicInteger(0);
 
-    /** How many concurrent network eval calls are allowed per tree. keep small to keep MCTS expansion deterministic */
-    public static int MAX_PENDING = 4;
+    /** How many concurrent network eval calls are allowed per tree. Higher values let the
+     * inference server batch more requests at once (big throughput win on CPU and GPU
+     * inference). Too high and MCTS expansion gets less deterministic because more nodes
+     * are evaluated in parallel before their priors are applied to the selection. */
+    public static int MAX_PENDING = 16;
     /** 0 means use random seed*/
     public static long DEFAULT_SEED = 2612645407030963366L;
     public static boolean SHOW_THREAD_INFO = true;
@@ -228,6 +231,9 @@ public class ComputerPlayerMCTS2 extends ComputerPlayerMCTS {
                     if(current==null) {
                         continue;
                     }
+                    // Survived dedup — publish to the scope-root's hash index so future
+                    // expansions can find this node in O(1) instead of BFS-scanning the scope.
+                    current.registerInScope(current.parent.playerId);
                 }
             }
             double result;

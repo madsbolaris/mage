@@ -42,12 +42,28 @@ public class MCTSNode2 extends MCTSNode {
                 }
             }
             backpropagate(1 + networkScore, 0);
-            evaluationPending = false;
             ((ComputerPlayerMCTS2)basePlayer).pendingNodes.decrementAndGet();
+            // Signal both gates: the per-node awaitEvaluation lock and the global pending-slot lock.
+            synchronized (this) {
+                evaluationPending = false;
+                notifyAll();
+            }
+            synchronized (basePlayer) {
+                basePlayer.notifyAll();
+            }
             return;
         }
-        while (((ComputerPlayerMCTS2)basePlayer).pendingNodes.get() > ComputerPlayerMCTS2.MAX_PENDING) {
-            Thread.yield();
+        // Throttle concurrent in-flight evaluations. Use proper signaling instead of Thread.yield()
+        // so worker threads can sleep until a slot opens up rather than burning CPU.
+        synchronized (basePlayer) {
+            while (((ComputerPlayerMCTS2) basePlayer).pendingNodes.get() > ComputerPlayerMCTS2.MAX_PENDING) {
+                try {
+                    basePlayer.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
         }
         long[] nnIndices = new long[stateVector.size()];
         int k = 0;
@@ -90,7 +106,13 @@ public class MCTSNode2 extends MCTSNode {
                         backpropagate(1 + networkScore, 0);
                         setPriors();
                         ((ComputerPlayerMCTS2) basePlayer).pendingNodes.decrementAndGet();
+                        // Wake any thread waiting on the pending-slot gate.
+                        basePlayer.notifyAll();
+                    }
+                    // Wake any thread blocked in awaitEvaluation() for this node.
+                    synchronized (this) {
                         evaluationPending = false;
+                        notifyAll();
                     }
                 })
                 .exceptionally(ex -> {
@@ -99,14 +121,25 @@ public class MCTSNode2 extends MCTSNode {
                     // Still backprop something on failure so tree doesn't get stuck
                     backpropagate(0, 0);
                     ((ComputerPlayerMCTS2)basePlayer).pendingNodes.decrementAndGet();
-                    evaluationPending = false;
+                    synchronized (basePlayer) {
+                        basePlayer.notifyAll();
+                    }
+                    synchronized (this) {
+                        evaluationPending = false;
+                        notifyAll();
+                    }
                     throw new RuntimeException("REMOTE EVAL FAILURE");
                 });
 
     }
-    public void awaitEvaluation() {
+    public synchronized void awaitEvaluation() {
         while (evaluationPending) {
-            Thread.yield();
+            try {
+                wait();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
         }
     }
 }

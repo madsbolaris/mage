@@ -74,6 +74,14 @@ public class MCTSNode {
     private PlayerScript prefixScript = new PlayerScript();
     private PlayerScript opponentPrefixScript = new PlayerScript();
 
+    /**
+     * Lazy hash-based transposition index. Lives on scope-root nodes. Keyed by the scopePlayerId
+     * a caller passes to {@link #getMatchingStateInScope(Set, UUID)}, then by the state vector.
+     * Allows duplicate detection in O(1) amortized instead of O(scopeSize) per lookup.
+     * Stale entries (pruned nodes) are tolerated and lazily evicted in the lookup itself.
+     */
+    protected Map<UUID, HashMap<Set<Integer>, MCTSNode>> scopeIndex;
+
 
 
     /**
@@ -131,19 +139,51 @@ public class MCTSNode {
         return null;
     }
     public MCTSNode getMatchingStateInScope(Set<Integer> state, UUID scopePlayerId) {
-        ArrayDeque<MCTSNode> queue = new ArrayDeque<>();
-        queue.add(this);
-        while (!queue.isEmpty()) {
-            MCTSNode current = queue.remove();
-            if(current.children.isEmpty()) continue; //tree can have unfinalized nodes
-            if(current.stateVector.equals(state)) {
-                return current;
-            }
-            if(current.playerId.equals(scopePlayerId) || current.children.size()==1) {
-                queue.addAll(current.children);
+        // Fast path: hash index on the scope root (this).
+        if (scopeIndex != null) {
+            HashMap<Set<Integer>, MCTSNode> m = scopeIndex.get(scopePlayerId);
+            if (m != null) {
+                MCTSNode hit = m.get(state);
+                if (hit != null) {
+                    // Validate: must still be attached to the tree, must still belong to
+                    // this scope, must still match the state vector, and must not be self.
+                    if (hit != this
+                            && hit.parent != null
+                            && state.equals(hit.stateVector)
+                            && hit.getPlayerScope(scopePlayerId) == this) {
+                        return hit;
+                    }
+                    // Stale entry — drop it. A correct entry (if any) will be re-added when
+                    // the matching node next calls registerInScope.
+                    m.remove(state);
+                }
             }
         }
         return null;
+    }
+    /**
+     * Registers this node in the nearest enclosing scope-root's hash index for {@code scopePlayerId}.
+     * Must be called after {@link #validateState()} has populated {@code stateVector} and
+     * (for non-root nodes) the parent's playerId. Idempotent and safe to call multiple times.
+     */
+    public void registerInScope(UUID scopePlayerId) {
+        if (stateVector == null || parent == null) return;
+        MCTSNode scopeRoot = getPlayerScope(scopePlayerId);
+        if (scopeRoot == null || scopeRoot == this) return;
+        synchronized (scopeRoot) {
+            if (scopeRoot.scopeIndex == null) {
+                scopeRoot.scopeIndex = new HashMap<>();
+            }
+            HashMap<Set<Integer>, MCTSNode> m =
+                    scopeRoot.scopeIndex.computeIfAbsent(scopePlayerId, k -> new HashMap<>());
+            MCTSNode prev = m.get(stateVector);
+            if (prev == null || prev.parent == null) {
+                // No entry, or existing entry was pruned — claim the slot.
+                m.put(stateVector, this);
+            }
+            // If a live entry already exists, leave it alone; the duplicate-pruning
+            // path in MCTS2 will resolve which of the two survives.
+        }
     }
     public List<MCTSNode> getChildren() {
         return children;

@@ -2,10 +2,13 @@ package mage.player.ai;
 
 import okhttp3.*;
 import org.msgpack.core.MessageBufferPacker;
+import org.msgpack.core.MessageFormat;
 import org.msgpack.core.MessagePack;
 import org.msgpack.core.MessageUnpacker;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -196,15 +199,17 @@ public class RemoteModelEvaluator implements AutoCloseable {
             }
         }
 
-        // 2) Encode request
+        // 2) Encode request — indices as int32 (feature indices are always < 2M),
+        // offsets as int32 (batch count < 1000). Halves wire payload vs int64.
+        // See madsbolaris/mage#21 (C40).
         MessageBufferPacker pk = MessagePack.newDefaultBufferPacker();
         pk.packMapHeader(2);
         pk.packString("indices");
         pk.packArrayHeader(cat.length);
-        for (long v : cat) pk.packLong(v);
+        for (long v : cat) pk.packInt((int) v);
         pk.packString("offsets");
         pk.packArrayHeader(offsets.length);
-        for (long v : offsets) pk.packLong(v);
+        for (long v : offsets) pk.packInt((int) v);
         pk.close();
 
         RequestBody body = RequestBody.create(pk.toByteArray(), MediaType.parse("application/x-msgpack"));
@@ -244,7 +249,22 @@ public class RemoteModelEvaluator implements AutoCloseable {
         }
     }
 
+    /**
+     * Unpack a policy array. Supports two formats:
+     * - BINARY: raw little-endian float32 bytes (new, from P2). ~10x less overhead.
+     * - ARRAY: msgpack array of float64 (legacy).
+     */
     private static float[] unpackFloatArray(MessageUnpacker up) throws Exception {
+        MessageFormat fmt = up.getNextFormat();
+        if (fmt.getValueType() == org.msgpack.value.ValueType.BINARY) {
+            int byteLen = up.unpackBinaryHeader();
+            byte[] raw = up.readPayload(byteLen);
+            int n = byteLen / 4; // float32 = 4 bytes
+            float[] arr = new float[n];
+            ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer().get(arr);
+            return arr;
+        }
+        // Legacy: array of float64
         int n = up.unpackArrayHeader();
         float[] arr = new float[n];
         for (int j = 0; j < n; j++) {

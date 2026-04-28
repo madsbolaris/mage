@@ -119,9 +119,15 @@ public abstract class AbilityImpl implements Ability {
         this.manaCosts = ability.manaCosts.copy();
         this.manaCostsToPay = ability.manaCostsToPay.copy();
         this.costs = ability.costs.copy();
-        this.watchers = CardUtil.deepCopyObject(ability.watchers);
+        // Skip deep copy for empty/null collections — most abilities have
+        // no watchers, no subAbilities, no hints, no icons, no costsTagMap.
+        // CardUtil.deepCopyObject on an empty ArrayList still allocates.
+        this.watchers = ability.watchers.isEmpty()
+                ? new ArrayList<>() : CardUtil.deepCopyObject(ability.watchers);
 
-        this.subAbilities = CardUtil.deepCopyObject(ability.subAbilities);
+        this.subAbilities = ability.subAbilities == null
+                ? null : ability.subAbilities.isEmpty()
+                ? new ArrayList<>() : CardUtil.deepCopyObject(ability.subAbilities);
         this.modes = ability.getModes().copy();
         this.ruleAtTheTop = ability.ruleAtTheTop;
         this.ruleVisible = ability.ruleVisible;
@@ -135,14 +141,18 @@ public abstract class AbilityImpl implements Ability {
         this.canBeCopied = ability.canBeCopied;
         this.targetAdjuster = ability.targetAdjuster;
         this.costAdjuster = ability.costAdjuster;
-        this.hints = CardUtil.deepCopyObject(ability.hints);
-        this.icons = CardUtil.deepCopyObject(ability.icons);
+        this.hints = ability.hints.isEmpty()
+                ? new ArrayList<>() : CardUtil.deepCopyObject(ability.hints);
+        this.icons = ability.icons.isEmpty()
+                ? new ArrayList<>() : CardUtil.deepCopyObject(ability.icons);
         this.customOutcome = ability.customOutcome;
         this.identifier = ability.identifier;
         this.activated = ability.activated;
         this.appendToRule = ability.appendToRule;
         this.sourcePermanentTransformCount = ability.sourcePermanentTransformCount;
-        this.costsTagMap = CardUtil.deepCopyObject(ability.costsTagMap);
+        this.costsTagMap = ability.costsTagMap == null
+                ? null : ability.costsTagMap.isEmpty()
+                ? new HashMap<>() : CardUtil.deepCopyObject(ability.costsTagMap);
     }
 
     @Override

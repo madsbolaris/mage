@@ -29,7 +29,9 @@ public abstract class NthTargetPointer extends TargetPointerImpl {
     protected NthTargetPointer(final NthTargetPointer nthTargetPointer) {
         super(nthTargetPointer);
         this.targetIndex = nthTargetPointer.targetIndex;
-        this.zoneChangeCounter.putAll(nthTargetPointer.zoneChangeCounter);
+        if (!nthTargetPointer.zoneChangeCounter.isEmpty()) {
+            this.zoneChangeCounter.putAll(nthTargetPointer.zoneChangeCounter);
+        }
     }
 
     @Override

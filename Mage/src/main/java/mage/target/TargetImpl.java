@@ -76,8 +76,12 @@ public abstract class TargetImpl implements Target {
         this.requiredExplicitlySet = target.requiredExplicitlySet;
         this.chosen = target.chosen;
         this.isSkipChoice = target.isSkipChoice;
-        this.targets.putAll(target.targets);
-        this.zoneChangeCounters.putAll(target.zoneChangeCounters);
+        if (!target.targets.isEmpty()) {
+            this.targets.putAll(target.targets);
+        }
+        if (!target.zoneChangeCounters.isEmpty()) {
+            this.zoneChangeCounters.putAll(target.zoneChangeCounters);
+        }
         this.atRandom = target.atRandom;
         this.notTarget = target.notTarget;
         this.targetController = target.targetController;

@@ -86,8 +86,11 @@ public class Modes extends LinkedHashMap<UUID, Mode> implements Copyable<Modes> 
         this.isRandom = modes.isRandom;
 
         // current mode must be "copied" at the end
-        this.selectedModes.addAll(modes.getSelectedModes()); // TODO: bugged - can lost multi selects here?
-        if (modes.getSelectedModes().isEmpty()) {
+        // Copy selectedModes directly instead of calling getSelectedModes() twice.
+        // getSelectedModes() does an expensive O(modes * selected) reordering and
+        // allocates a new ArrayList on each call.
+        this.selectedModes.addAll(modes.selectedModes);
+        if (modes.selectedModes.isEmpty()) {
             this.currentMode = values().iterator().next();
         } else {
             this.currentMode = get(modes.getMode().getId()); // TODO: bugged - can lost multi selects here?

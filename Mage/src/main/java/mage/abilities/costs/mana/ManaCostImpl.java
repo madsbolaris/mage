@@ -38,11 +38,15 @@ public abstract class ManaCostImpl extends CostImpl implements ManaCost {
         super(manaCost);
         this.payment = manaCost.payment.copy();
         this.usedManaToPay = manaCost.usedManaToPay.copy();
-        this.cost = manaCost.cost.copy();
-        this.options = manaCost.options.copy();
-        if (manaCost.sourceFilter != null) {
-            this.sourceFilter = manaCost.sourceFilter.copy();
-        }
+        // cost and options are only set during construction and never mutated
+        // afterward, so sharing the reference avoids expensive deep copies.
+        // See madsbolaris/mage#5 (J5) — profiling shows ManaOptions.copy() is
+        // the single largest CPU consumer (~16% of all game-thread CPU).
+        this.cost = manaCost.cost;
+        this.options = manaCost.options;
+        // sourceFilter is also never mutated after being assigned — only read
+        // in pool.pay(). Sharing avoids FilterImpl copy (ArrayList + predicates).
+        this.sourceFilter = manaCost.sourceFilter;
         this.phyrexian = manaCost.phyrexian;
     }
 
